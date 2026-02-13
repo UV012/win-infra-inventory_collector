@@ -1,0 +1,53 @@
+---
+- name: Gather Windows facts
+  hosts: windows
+  gather_facts: yes
+  tasks:
+    - name: Extract required facts
+      set_fact:
+        win_hostname: "{{ ansible_hostname }}"
+        win_os: "{{ ansible_os_name }}"
+        win_os_version: "{{ ansible_distribution_version }}"
+        win_arch: "{{ ansible_architecture }}"
+        win_cpu: "{{ ansible_processor_vcpus }}"
+        win_ram: "{{ ansible_memtotal_mb }}"
+        win_ip: "{{ ansible_ip_addresses | select('match','^\\d+\\.\\d+\\.\\d+\\.\\d+$') | list | first }}"
+
+    - name: Save facts for localhost
+      set_fact:
+        windows_data:
+          hostname: "{{ win_hostname }}"
+          os: "{{ win_os }}"
+          os_version: "{{ win_os_version }}"
+          arch: "{{ win_arch }}"
+          cpu: "{{ win_cpu }}"
+          ram: "{{ win_ram }}"
+          ip: "{{ win_ip }}"
+
+- name: Store facts in MySQL
+  hosts: localhost
+  gather_facts: no
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    db_name: asset_db
+    db_user: user
+    db_password: YourPassword
+  tasks:
+    - name: Insert Windows facts into MySQL
+      community.mysql.mysql_query:
+        login_db: "{{ db_name }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+        query: >
+          INSERT INTO windows_assets
+          (hostname, os_name, os_version, architecture, cpu_cores, total_ram_mb, ipv4_address)
+          VALUES
+          (
+            '{{ hostvars["winvm"]["windows_data"]["hostname"] }}',
+            '{{ hostvars["winvm"]["windows_data"]["os"] }}',
+            '{{ hostvars["winvm"]["windows_data"]["os_version"] }}',
+            '{{ hostvars["winvm"]["windows_data"]["arch"] }}',
+            {{ hostvars["winvm"]["windows_data"]["cpu"] }},
+            {{ hostvars["winvm"]["windows_data"]["ram"] }},
+            '{{ hostvars["winvm"]["windows_data"]["ip"] }}'
+          );
